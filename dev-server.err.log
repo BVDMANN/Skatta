@@ -1,0 +1,11 @@
+[browser] Uncaught Error: Map container is already initialized.
+    at div (<anonymous>)
+    at Dashboard (components/features/jobs/Dashboard.tsx:599:21)
+    at Page (app/page.tsx:27:11)
+  597 |                 <div className="relative h-[70vh]">
+  598 |                   {leaflet ? (
+> 599 |                     <MapContainer
+      |                     ^
+  600 |                       center={[0.4167, 9.4498]}  // Default to Glass area
+  601 |                       zoom={12}
+  602 |                       scrollWheelZoom={true}

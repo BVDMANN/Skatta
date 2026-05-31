@@ -1,0 +1,14 @@
+
+> skatta-app@0.1.0 dev
+> next dev
+
+▲ Next.js 16.2.6 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://192.168.56.1:3000
+✓ Ready in 3.9s
+
+ GET / 200 in 3.2s (next.js: 1074ms, application-code: 2.1s)
+✓ Compiled in 6.1s
+ GET / 200 in 824ms (next.js: 324ms, application-code: 500ms)
+ GET / 200 in 734ms (next.js: 9ms, application-code: 726ms)
+ GET /offres/j1 200 in 1360ms (next.js: 1261ms, application-code: 99ms)

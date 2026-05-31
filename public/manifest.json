@@ -1,0 +1,15 @@
+{
+  "name": "Skatta",
+  "short_name": "Skatta",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F8F9FA",
+  "theme_color": "#008000",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/1063/1063376.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

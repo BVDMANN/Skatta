@@ -1,0 +1,189 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --foreground-rgb: 15, 23, 42;
+  --background-start-rgb: 255, 255, 255;
+  --background-end-rgb: 241, 245, 249;
+}
+
+body {
+  color: rgb(var(--foreground-rgb));
+  background: #F8FAFC;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, system-ui, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+  overflow-x: hidden;
+  text-rendering: geometricPrecision;
+}
+
+.dark {
+  --foreground-rgb: 255, 255, 255;
+  --background-start-rgb: 10, 10, 10;
+  --background-end-rgb: 8, 8, 8;
+}
+
+.dark body {
+  background:
+    radial-gradient(circle at top left, rgba(0, 100, 0, 0.14), transparent 34rem),
+    radial-gradient(circle at top right, rgba(255, 204, 0, 0.08), transparent 28rem),
+    #0A0A0A;
+  color: rgb(var(--foreground-rgb));
+}
+
+/* 🚀 SKATTA HIGH-TECH GLASSMORPHISM - Refined for Smart-Feel */
+.glass {
+  @apply backdrop-blur-2xl bg-white/70 border border-white/50 shadow-2xl shadow-black/10;
+}
+
+.glass-dark {
+  @apply backdrop-blur-2xl bg-skatta-blue/85 text-white border-b border-white/10 shadow-2xl shadow-black/20;
+}
+
+/* 💳 PREMIUM JOB CARDS (Editorial Version) */
+.job-card-premium {
+  @apply bg-white rounded-[2.5rem] border border-gray-100 p-0 overflow-hidden transition-all duration-500;
+  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.04);
+}
+
+.job-card-premium:hover {
+  @apply shadow-2xl border-skatta-green/40 -translate-y-3;
+  box-shadow: 0 30px 60px -15px rgba(0, 128, 0, 0.12);
+}
+
+.dark .job-card-premium {
+  @apply bg-skatta-darker/80 border-skatta-blue/20;
+}
+
+.dark .job-card-premium:hover {
+  @apply border-skatta-green/40 shadow-xl;
+  box-shadow: 0 30px 60px -15px rgba(0, 158, 96, 0.2);
+}
+
+/* 💊 TACTILE ACTION BUTTONS - "Physical Press" Feel */
+.btn-action {
+  @apply bg-skatta-green text-white rounded-full py-4 px-8 font-black transition-all duration-300 flex items-center justify-center gap-2 shadow-lg shadow-skatta-green/30 hover:bg-green-700 hover:shadow-skatta-green/50 active:scale-90;
+}
+
+.dark .btn-action {
+  @apply bg-skatta-green/90 hover:bg-skatta-green/80;
+}
+
+.btn-outline {
+  @apply bg-white text-skatta-blue border-2 border-gray-100 rounded-full py-4 px-8 font-black transition-all duration-300 flex items-center justify-center gap-2 hover:border-skatta-green/40 active:scale-90;
+}
+
+.dark .btn-outline {
+  @apply bg-skatta-darker/80 text-skatta-yellow border-skatta-blue/30 hover:border-skatta-green/40;
+}
+
+/* 💰 PREMIUM PRICE BUTTON */
+.btn-price {
+  @apply bg-skatta-yellow text-skatta-blue rounded-full py-3 px-6 font-black transition-all duration-300 flex items-center justify-center gap-2 shadow-lg shadow-skatta-yellow/30 hover:bg-yellow-400 hover:shadow-skatta-yellow/50 active:scale-95;
+}
+
+.dark .btn-price {
+  @apply bg-skatta-yellow/90 text-skatta-blue hover:bg-skatta-yellow/80;
+}
+
+/* 🏷️ SECTOR BADGES */
+.badge-sector {
+  @apply px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-300;
+}
+
+.badge-sector.batiment {
+  @apply bg-skatta-green/20 text-skatta-green;
+}
+.badge-sector.transport {
+  @apply bg-skatta-yellow/20 text-skatta-yellow;
+}
+.badge-sector.entretien {
+  @apply bg-skatta-blue/20 text-skatta-blue;
+}
+.badge-sector.other {
+  @apply bg-skatta-blue/20 text-skatta-blue;
+}
+
+/* ⚡ SMART PULSE ANIMATION - "Breathing" Effect */
+@keyframes breathe-green {
+  0% { transform: scale(1); opacity: 0.8; }
+  50% { transform: scale(1.2); opacity: 1; }
+  100% { transform: scale(1); opacity: 0.8; }
+}
+
+.animate-pulse-green {
+  animation: breathe-green 3s ease-in-out infinite;
+}
+
+/* 🖋️ TYPOGRAPHY HIERARCHY - Editorial Style */
+.text-editorial-header {
+  @apply font-black tracking-tighter leading-tight text-skatta-blue;
+}
+
+.dark .text-editorial-header {
+  @apply text-skatta-yellow;
+}
+
+.text-editorial-label {
+  @apply text-[10px] font-black uppercase tracking-widest text-gray-400;
+}
+
+.dark .text-editorial-label {
+  @apply text-gray-300;
+}
+
+/* 📱 MOBILE SPECIFIC */
+@media (max-width: 640px) {
+  .job-card-premium {
+    @apply rounded-[2rem];
+  }
+}
+
+/* 🗺️ LEAFLET MAP CUSTOMIZATIONS */
+.leaflet-container {
+  /* Override Leaflet's default styling to match our design */
+  a.leaflet-popup-close-button {
+    @apply text-skatta-green hover:text-skatta-green/80 transition-colors;
+  }
+
+  .leaflet-popup-content-wrapper {
+    @apply bg-skatta-darker/90 rounded-xl border border-skatta-blue/20;
+  }
+
+  .leaflet-popup-content {
+    @apply p-0 !important;
+  }
+
+  .leaflet-popup-tip {
+    @apply bg-skatta-darker/90 border border-skatta-blue/20;
+  }
+
+  /* Custom marker styles */
+  .leaflet-job-marker {
+    @apply drop-shadow-lg;
+  }
+
+  .leaflet-job-marker-urgent {
+    @apply animate-pulse;
+  }
+
+  /* Zoom control buttons */
+  .leaflet-control-zoom-in,
+  .leaflet-control-zoom-out {
+    @apply bg-skatta-blue/20 text-skatta-yellow rounded-md hover:bg-skatta-blue/30 transition-colors !important;
+    border: none !important;
+    font-weight: bold !important;
+    width: 28px !important;
+    height: 28px !important;
+    line-height: 26px !important;
+  }
+
+  .leaflet-control-zoom-in:hover,
+  .leaflet-control-zoom-out:hover {
+    @apply bg-skatta-blue/30 !important;
+  }
+
+  .leaflet-bar {
+    box-shadow: 0 18px 40px -20px rgba(0, 45, 98, 0.55) !important;
+  }
+}
