@@ -1,80 +1,102 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import dynamic from 'next/dynamic';
-import { motion, useAnimation } from 'framer-motion';
+import 'leaflet/dist/leaflet.css';
+import { motion } from 'framer-motion';
 import type { Map as LeafletMap } from 'leaflet';
 import {
-  MapPin, Search, Bell, User, MessageSquare, Clock, TrendingUp, ArrowRight, ShieldCheck,
-  List, Pencil, Filter, DollarSign, Flame, Moon
+  MapPin, Search, Bell, User, MessageSquare, TrendingUp, ArrowRight,
+  List, Pencil, Filter, Flame, Heart, ChevronDown, RotateCcw, Briefcase, CalendarDays
 } from 'lucide-react';
 import { PremiumButton } from '@/components/shared/PremiumButton';
-import { Job } from '@/types';
+import { Categories } from '@/components/features/jobs/Categories';
+import { HowItWorks } from '@/components/features/jobs/HowItWorks';
+import { Footer } from '@/components/shared/Footer';
+import { Job, Employer } from '@/types';
 import { cn } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
-import { MOCK_JOBS } from '@/lib/mock-data';
+import Link from 'next/link';
+import { SITE_IMAGES } from '@/lib/mock-data';
+import { getJobMarkerIcon, type LeafletModule } from '@/components/features/jobs/job-marker-icon';
 
 const MapContainer = dynamic(() => import('react-leaflet').then(mod => mod.MapContainer), { ssr: false });
 const TileLayer = dynamic(() => import('react-leaflet').then(mod => mod.TileLayer), { ssr: false });
 const Marker = dynamic(() => import('react-leaflet').then(mod => mod.Marker), { ssr: false });
 const Popup = dynamic(() => import('react-leaflet').then(mod => mod.Popup), { ssr: false });
 
-type LeafletModule = typeof import('leaflet');
+const FAV_KEY = 'skatta-favoris';
 
-// Custom icon for markers
-const getJobMarkerIcon = (urgency: string, leaflet: LeafletModule) => {
-  return new leaflet.Icon({
-    iconUrl: require('leaflet/dist/images/marker-icon.png'),
-    iconRetinaUrl: require('leaflet/dist/images/marker-icon-2x.png'),
-    shadowUrl: require('leaflet/dist/images/marker-shadow.png'),
-    iconSize: [25, 41],
-    iconAnchor: [12, 41],
-    popupAnchor: [1, -34],
-    tooltipAnchor: [16, -28],
-    className: `leaflet-job-marker ${urgency === 'high' ? 'leaflet-job-marker-urgent' : ''}`
-  });
+type SortKey = 'recent' | 'price-desc' | 'price-asc';
+
+/** Libellé de date de publication (« Aujourd'hui », « Hier », « Il y a X j »). */
+const postedLabel = (iso: string) => {
+  const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
+  if (days <= 0) return "Aujourd'hui";
+  if (days === 1) return 'Hier';
+  return `Il y a ${days} j`;
 };
 
-// Types for filters
-type FilterOptions = {
-  sector: string[];
-  salaryRange: [number, number];
-  showUrgent: boolean;
+const formatPrice = (price: number) => `${price.toLocaleString()} FCFA/JOUR`;
+
+const getSectorColor = (sector: string) => {
+  switch (sector.toLowerCase()) {
+    case 'bâtiment': return 'bg-green-100 text-green-800';
+    case 'transport': return 'bg-amber-100 text-amber-800';
+    case 'entretien': return 'bg-blue-100 text-blue-800';
+    case 'sécurité': return 'bg-violet-100 text-violet-800';
+    case 'logistique': return 'bg-teal-100 text-teal-800';
+    default: return 'bg-slate-100 text-slate-700';
+  }
+};
+
+const scrollToId = (id: string) => {
+  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
 };
 
 export const Dashboard = ({
-  isGuest = false,
-  onActionRequired,
-  onNavigate
+  jobs,
+  employers,
+  user,
 }: {
-  isGuest?: boolean,
-  onActionRequired?: () => void,
-  onNavigate?: (view: 'home' | 'messages' | 'profile') => void
+  /** Offres publiées lues depuis la base (props serveur). */
+  jobs: Job[];
+  employers: Record<string, Employer>;
+  user: { id: string; email: string; role: 'candidat' | 'employeur' } | null;
 }) => {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<'list' | 'map'>('list');
-  const [filters, setFilters] = useState<FilterOptions>({
-    sector: [],
-    salaryRange: [0, 50000],
-    showUrgent: false,
-  });
   const [searchQuery, setSearchQuery] = useState('');
-  const [filteredJobs, setFilteredJobs] = useState<Job[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [sectors, setSectors] = useState<string[]>([]);
+  const [neighborhood, setNeighborhood] = useState('Tous');
+  const [minSalary, setMinSalary] = useState(0);
+  const [contract, setContract] = useState('Tous');
+  const [showUrgent, setShowUrgent] = useState(false);
+  const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
+  const [sort, setSort] = useState<SortKey>('recent');
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [favorites, setFavorites] = useState<string[]>([]);
   const [hoveredJobId, setHoveredJobId] = useState<string | null>(null);
-  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [leaflet, setLeaflet] = useState<LeafletModule | null>(null);
   const [mapRef, setMapRef] = useState<LeafletMap | null>(null);
   const zoomControlAddedRef = useRef(false);
 
-  // Animation controls
-  const statsAnimation = useAnimation();
-  const cardAnimation = useAnimation();
-
-  // Initialize filtered jobs
+  // Favoris persistés dans le navigateur
   useEffect(() => {
-    applyFilters();
-  }, [searchQuery, filters]);
+    try {
+      const saved = JSON.parse(localStorage.getItem(FAV_KEY) ?? '[]');
+      if (Array.isArray(saved)) setFavorites(saved);
+    } catch { /* stockage indisponible : on ignore */ }
+  }, []);
+
+  const toggleFavorite = (id: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setFavorites((prev) => {
+      const next = prev.includes(id) ? prev.filter((f) => f !== id) : [...prev, id];
+      try { localStorage.setItem(FAV_KEY, JSON.stringify(next)); } catch { /* ignore */ }
+      return next;
+    });
+  };
 
   useEffect(() => {
     import('leaflet').then(setLeaflet);
@@ -82,522 +104,577 @@ export const Dashboard = ({
 
   useEffect(() => {
     if (!leaflet || !mapRef || zoomControlAddedRef.current) return;
-
     leaflet.control.zoom({ position: 'topright' }).addTo(mapRef);
     zoomControlAddedRef.current = true;
   }, [leaflet, mapRef]);
 
-  // Apply filters and search
-  const applyFilters = () => {
-    setIsLoading(true);
-
-    // Simulate network delay for realism
-    const timer = setTimeout(() => {
-      let results = [...MOCK_JOBS];
-
-      // Text search
-      if (searchQuery.trim()) {
-        const query = searchQuery.toLowerCase().trim();
-        results = results.filter(job =>
-          job.title.toLowerCase().includes(query) ||
-          job.description.toLowerCase().includes(query) ||
-          job.category.toLowerCase().includes(query) ||
-          job.location.neighborhood.toLowerCase().includes(query)
-        );
-      }
-
-      // Sector filter
-      if (filters.sector.length > 0) {
-        results = results.filter(job =>
-          filters.sector.includes(job.category)
-        );
-      }
-
-      // Salary range filter
-      results = results.filter(job =>
-        job.price >= filters.salaryRange[0] &&
-        job.price <= filters.salaryRange[1]
-      );
-
-      // Urgent filter
-      if (filters.showUrgent) {
-        results = results.filter(job => job.urgency === 'high');
-      }
-
-      setFilteredJobs(results);
-      setIsLoading(false);
-    }, 300);
-
-    return () => clearTimeout(timer);
-  };
-
-  // Handle job card click
-  const handleJobClick = (jobId: string) => {
-    // Navigate to job detail page with /offres/[id] route
-    router.push(`/offres/${jobId}`);
-  };
-
-  // Handle job marker click on map
-  const handleMarkerClick = (jobId: string) => {
-    setSelectedJobId(jobId);
-    // Also update the hover state for visual feedback
-    setHoveredJobId(jobId);
-    // Optionally, you could open a popup or bottom sheet here
-    // For now, we'll just highlight the job and let the user click to go to detail page
-  };
-
-  // Handle sector toggle
-  const toggleSector = (sector: string) => {
-    setFilters(prev => {
-      const newSectors = [...prev.sector];
-      const index = newSectors.indexOf(sector);
-      if (index === -1) {
-        newSectors.push(sector);
-      } else {
-        newSectors.splice(index, 1);
-      }
-      return { ...prev, sector: newSectors };
+  const allSectors = useMemo(
+    () => Array.from(new Set(jobs.map((j) => j.category))),
+    [jobs]
+  );
+  const allNeighborhoods = useMemo(
+    () => Array.from(new Set(jobs.map((j) => j.location.neighborhood))).sort(),
+    [jobs]
+  );
+  const allContracts = useMemo(
+    () => Array.from(new Set(jobs.map((j) => j.contractType ?? 'Journalier'))),
+    [jobs]
+  );
+  const categoryCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    jobs.forEach((j) => {
+      counts[j.category] = (counts[j.category] ?? 0) + 1;
     });
-  };
+    return counts;
+  }, [jobs]);
 
-  // Handle urgent toggle
-  const toggleUrgent = () => {
-    setFilters(prev => ({ ...prev, showUrgent: !prev.showUrgent }));
-  };
+  const hasActiveFilters =
+    searchQuery.trim() !== '' || sectors.length > 0 || neighborhood !== 'Tous' ||
+    minSalary > 0 || contract !== 'Tous' || showUrgent || showFavoritesOnly;
 
-  // Clear all filters
-  const clearFilters = () => {
-    setFilters({
-      sector: [],
-      salaryRange: [0, 50000],
-      showUrgent: false,
-    });
-    setSearchQuery('');
-  };
+  const filteredJobs = useMemo(() => {
+    let results = [...jobs];
 
-  // Get sector color
-  const getSectorColor = (sector: string) => {
-    switch (sector.toLowerCase()) {
-      case 'bâtiment':
-        return 'bg-skatta-green/20 text-skatta-green';
-      case 'transport':
-        return 'bg-skatta-yellow/20 text-skatta-yellow';
-      case 'entretien':
-        return 'bg-skatta-blue/20 text-skatta-blue';
-      default:
-        return 'bg-skatta-blue/20 text-skatta-blue';
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      results = results.filter((job) => {
+        const employer = employers[job.employerId]?.name ?? '';
+        return (
+          job.title.toLowerCase().includes(q) ||
+          job.description.toLowerCase().includes(q) ||
+          job.category.toLowerCase().includes(q) ||
+          job.location.neighborhood.toLowerCase().includes(q) ||
+          employer.toLowerCase().includes(q)
+        );
+      });
     }
+    if (sectors.length > 0) results = results.filter((job) => sectors.includes(job.category));
+    if (neighborhood !== 'Tous') results = results.filter((job) => job.location.neighborhood === neighborhood);
+    if (minSalary > 0) results = results.filter((job) => job.price >= minSalary);
+    if (contract !== 'Tous') results = results.filter((job) => (job.contractType ?? 'Journalier') === contract);
+    if (showUrgent) results = results.filter((job) => job.urgency === 'high');
+    if (showFavoritesOnly) results = results.filter((job) => favorites.includes(job.id));
+
+    switch (sort) {
+      case 'price-desc': results.sort((a, b) => b.price - a.price); break;
+      case 'price-asc': results.sort((a, b) => a.price - b.price); break;
+      default: results.sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt));
+    }
+    return results;
+  }, [jobs, employers, searchQuery, sectors, neighborhood, minSalary, contract, showUrgent, showFavoritesOnly, sort, favorites]);
+
+  const toggleSector = (sector: string) => {
+    setSectors((prev) =>
+      prev.includes(sector) ? prev.filter((s) => s !== sector) : [...prev, sector]
+    );
   };
 
-  // Format price with FCFA/JOUR
-  const formatPrice = (price: number) => {
-    return `${price.toLocaleString()} FCFA/JOUR`;
+  const clearFilters = () => {
+    setSectors([]);
+    setNeighborhood('Tous');
+    setMinSalary(0);
+    setContract('Tous');
+    setShowUrgent(false);
+    setShowFavoritesOnly(false);
+    setSearchQuery('');
+    setSort('recent');
   };
+
+  const handleSelectCategory = (sector: string) => {
+    setSectors((prev) => (prev.includes(sector) ? prev : [sector]));
+    setShowFavoritesOnly(false);
+    scrollToId('offres-liste');
+  };
+
+  const goToFavorites = () => {
+    setShowFavoritesOnly(true);
+    scrollToId('offres-liste');
+  };
+
+  const handleJobClick = (jobId: string) => router.push(`/offres/${jobId}`);
+
+  const liveCount = jobs.filter((job) => job.status === 'open').length;
+  const urgentCount = jobs.filter((job) => job.urgency === 'high').length;
+  const neighborhoodCount = new Set(jobs.map((job) => job.location.neighborhood)).size;
 
   return (
-    <div className="min-h-screen bg-skatta-dark dark:bg-skatta-darker">
-      {/* Dark mode toggle - for demo purposes */}
-      <div className="fixed top-4 right-4 z-50">
-        <button
-          onClick={() => document.documentElement.classList.toggle('dark')}
-          className="p-2 rounded-full bg-skatta-blue/20 text-skatta-blue hover:bg-skatta-blue/30 transition-colors"
-        >
-          <Moon size={20} />
-        </button>
-      </div>
-
-      {/* Gabon Color Accent Bar */}
+    <div className="min-h-screen bg-slate-50 text-slate-900">
+      {/* Barre tricolore Gabon */}
       <div className="h-1 w-full flex">
         <div className="flex-1 bg-skatta-green" />
         <div className="flex-1 bg-skatta-yellow" />
         <div className="flex-1 bg-skatta-blue" />
       </div>
 
-      {/* Header */}
-      <header className="glass-dark sticky top-0 z-40 border-b border-skatta-blue/10 backdrop-blur-sm px-6 py-4 flex justify-between items-center">
-        <div className="flex items-center gap-4">
-          <div className="w-10 h-10 rounded-xl bg-skatta-green flex items-center justify-center text-white font-black text-sm shadow-md">
-            {isGuest ? '?' : 'JN'}
-          </div>
-          <div className="hidden sm:flex flex-col">
-            <h2 className="text-sm font-black text-skatta-blue leading-none tracking-tight">{isGuest ? 'Visiteur' : 'Jean Nguema'}</h2>
-            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Libreville, Gabon</p>
-          </div>
-        </div>
-        <div className="flex gap-3">
-          <button
-            className="p-2.5 rounded-full bg-skatta-blue/20 text-skatta-blue hover:bg-skatta-blue/30 transition-colors"
-          >
-            <Bell size={20} />
+      {/* En-tête fixe — navigation visible dès l'arrivée */}
+      <header className="glass-dark fixed inset-x-0 top-0 z-40 px-4 sm:px-6 py-3">
+        <div className="max-w-7xl mx-auto flex justify-between items-center gap-3">
+          <button onClick={() => scrollToId('top')} className="flex items-center gap-2.5 shrink-0" aria-label="Skatta — Accueil">
+            <span className="w-10 h-10 rounded-xl bg-skatta-green flex items-center justify-center text-white font-black text-lg shadow-md">S</span>
+            <span className="text-xl font-black text-skatta-blue tracking-tight">Skatta</span>
           </button>
-          <button
-            onClick={() => onNavigate?.('profile')}
-            className="p-2.5 rounded-full bg-skatta-blue/20 text-skatta-blue hover:bg-skatta-blue/30 transition-colors"
-          >
-            <User size={20} />
-          </button>
+
+          <nav className="hidden md:flex items-center gap-1 text-sm font-bold" aria-label="Navigation principale">
+            <button onClick={() => scrollToId('top')} className="px-4 py-2 rounded-full text-slate-700 hover:bg-slate-100 transition-colors">Accueil</button>
+            <button onClick={() => scrollToId('offres-liste')} className="px-4 py-2 rounded-full text-slate-700 hover:bg-slate-100 transition-colors">Offres</button>
+            <button onClick={() => scrollToId('comment-ca-marche')} className="px-4 py-2 rounded-full text-slate-700 hover:bg-slate-100 transition-colors">Comment ça marche</button>
+            <button
+              onClick={goToFavorites}
+              className={cn(
+                "px-4 py-2 rounded-full inline-flex items-center gap-1.5 transition-colors",
+                showFavoritesOnly ? "bg-red-50 text-red-600" : "text-slate-700 hover:bg-slate-100"
+              )}
+            >
+              <Heart size={16} className={showFavoritesOnly ? "fill-red-500 text-red-500" : ""} />
+              Favoris
+              {favorites.length > 0 && (
+                <span className="min-w-5 h-5 px-1 rounded-full bg-red-500 text-white text-[11px] font-black inline-flex items-center justify-center">
+                  {favorites.length}
+                </span>
+              )}
+            </button>
+          </nav>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={goToFavorites}
+              className="md:hidden relative p-2.5 rounded-full bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+              aria-label="Mes favoris"
+            >
+              <Heart size={20} className={showFavoritesOnly ? "fill-red-500 text-red-500" : ""} />
+              {favorites.length > 0 && (
+                <span className="absolute -top-1 -right-1 min-w-5 h-5 px-1 rounded-full bg-red-500 text-white text-[11px] font-black inline-flex items-center justify-center">
+                  {favorites.length}
+                </span>
+              )}
+            </button>
+            {user?.role === 'employeur' && (
+              <Link
+                href="/tableau-de-bord/publier"
+                className="hidden md:inline-flex items-center gap-2 px-4 py-2.5 rounded-full bg-skatta-green text-white text-sm font-bold shadow-md shadow-skatta-green/20 hover:bg-skatta-green/90 transition-colors"
+              >
+                + Publier une offre
+              </Link>
+            )}
+            <Link
+              href="/mes-candidatures"
+              className="p-2.5 rounded-full bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+              aria-label="Mes candidatures"
+            >
+              <Bell size={20} />
+            </Link>
+            <Link
+              href="/compte"
+              className="p-2.5 rounded-full bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+              aria-label="Mon compte"
+            >
+              <User size={20} />
+            </Link>
+          </div>
         </div>
       </header>
 
-      {/* Main Content */}
-      <main className="px-6 sm:px-8 pt-12 space-y-16 max-w-7xl mx-auto pb-24">
-        {/* Hero Section */}
+      {/* Contenu principal */}
+      <main className="px-4 sm:px-8 pt-24 space-y-14 max-w-7xl mx-auto pb-24">
+        {/* Bannière « Trouvez votre prochaine mission » — claire */}
         <motion.div
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           transition={{ delay: 0.2 }}
-          className="space-y-8 text-center"
+          className="relative overflow-hidden rounded-3xl border border-slate-200 bg-white px-6 py-12 space-y-8 text-center shadow-lg shadow-slate-900/5"
         >
-          <h1 className="text-4xl font-black text-skatta-yellow mb-4 drop-shadow-lg">
-            Trouvez votre prochaine mission<br/>
-            <span className="block text-skatta-green text-3xl">au Gabon</span>
-          </h1>
-            <p className="text-lg text-gray-300 max-w-2xl mx-auto">
-              Des milliers d'opportunités vérifiées, des salaires justes, et une communauté de professionnels engagés.
+          <img
+            src={SITE_IMAGES.heroCity}
+            alt=""
+            aria-hidden="true"
+            className="absolute inset-0 w-full h-full object-cover opacity-20"
+          />
+          <div className="absolute inset-0 bg-gradient-to-b from-white/70 via-white/80 to-white" />
+          <div className="relative">
+            <h1 className="text-4xl font-black text-skatta-blue mb-4">
+              Trouvez votre prochaine mission<br />
+              <span className="block text-skatta-green text-3xl">au Gabon</span>
+            </h1>
+            <p className="text-lg text-slate-600 max-w-2xl mx-auto">
+              Des milliers d&apos;opportunités vérifiées, des salaires justes, et une communauté de professionnels engagés.
             </p>
 
-            {/* Stats Bar */}
-            <motion.ul
-              whileHover={{ y: -2 }}
-              animate={statsAnimation}
-              className="flex flex-wrap justify-center gap-6 mt-6"
+            <ul className="flex flex-wrap justify-center gap-4 sm:gap-6 mt-8">
+              <li className="flex flex-col items-center gap-1.5 p-4 bg-white rounded-2xl border border-slate-200 shadow-sm min-w-28">
+                <TrendingUp size={26} className="text-skatta-green" />
+                <div className="text-skatta-blue font-black text-2xl">{liveCount}</div>
+                <p className="text-[11px] text-slate-500 uppercase tracking-widest font-bold">Offres en ligne</p>
+              </li>
+              <li className="flex flex-col items-center gap-1.5 p-4 bg-white rounded-2xl border border-slate-200 shadow-sm min-w-28">
+                <Flame size={26} className="text-red-500" />
+                <div className="text-skatta-blue font-black text-2xl">{urgentCount}</div>
+                <p className="text-[11px] text-slate-500 uppercase tracking-widest font-bold">Urgentes</p>
+              </li>
+              <li className="flex flex-col items-center gap-1.5 p-4 bg-white rounded-2xl border border-slate-200 shadow-sm min-w-28">
+                <MapPin size={26} className="text-skatta-blue" />
+                <div className="text-skatta-blue font-black text-2xl">{neighborhoodCount}</div>
+                <p className="text-[11px] text-slate-500 uppercase tracking-widest font-bold">Quartiers couverts</p>
+              </li>
+              <li className="flex flex-col items-center gap-1.5 p-4 bg-white rounded-2xl border border-slate-200 shadow-sm min-w-28">
+                <Heart size={26} className="text-red-500" />
+                <div className="text-skatta-blue font-black text-2xl">{favorites.length}</div>
+                <p className="text-[11px] text-slate-500 uppercase tracking-widest font-bold">Favoris</p>
+              </li>
+            </ul>
+          </div>
+        </motion.div>
+
+        {/* Catégories avec images — cliquer filtre les offres */}
+        <Categories onSelect={handleSelectCategory} counts={categoryCounts} />
+
+        {/* Recherche + filtres */}
+        <section id="offres-liste" className="space-y-5 scroll-mt-24">
+          {/* Barre de recherche */}
+          <div className="relative">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Rechercher un métier, un employeur, un quartier…"
+              aria-label="Rechercher une offre"
+              className="w-full pl-11 pr-11 py-4 bg-white border border-slate-300 rounded-2xl focus:border-skatta-green focus:ring-2 focus:ring-skatta-green/20 text-slate-900 placeholder:text-slate-400 transition-all duration-300 shadow-sm text-base"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-full text-slate-400 hover:bg-slate-100"
+                aria-label="Effacer la recherche"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+
+          {/* Bouton filtres (mobile) + tri */}
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              onClick={() => setFiltersOpen((v) => !v)}
+              className={cn(
+                "md:hidden inline-flex items-center gap-2 px-5 py-3 rounded-full font-bold text-sm border transition-colors min-h-12",
+                hasActiveFilters
+                  ? "bg-skatta-green text-white border-skatta-green"
+                  : "bg-white text-slate-700 border-slate-300"
+              )}
+              aria-expanded={filtersOpen}
             >
-              <motion.li
-                key="live-jobs"
-                initial={{ opacity: 0, scale: 0.8 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: 0.1 }}
-                className="flex flex-col items-center gap-2 p-4 bg-skatta-darker/30 rounded-xl border border-skatta-green/20"
+              <Filter size={16} /> Filtres
+              {hasActiveFilters && (
+                <span className="min-w-5 h-5 px-1 rounded-full bg-white text-skatta-green text-[11px] font-black inline-flex items-center justify-center">•</span>
+              )}
+              <ChevronDown size={16} className={cn("transition-transform", filtersOpen && "rotate-180")} />
+            </button>
+
+            <div className="flex items-center gap-2 ml-auto">
+              <label htmlFor="tri-offres" className="text-sm font-bold text-slate-500 hidden sm:block">Trier par</label>
+              <select
+                id="tri-offres"
+                value={sort}
+                onChange={(e) => setSort(e.target.value as SortKey)}
+                className="px-4 py-3 rounded-full bg-white border border-slate-300 text-sm font-bold text-slate-700 shadow-sm focus:border-skatta-green focus:outline-none min-h-12"
               >
-                <TrendingUp size={28} className="text-skatta-green" />
-                <div className="text-skatta-yellow font-black text-2xl">247</div>
-                <p className="text-xs text-gray-400 uppercase tracking-widest">Offres Live</p>
-              </motion.li>
-
-              <motion.li
-                key="urgent"
-                initial={{ opacity: 0, scale: 0.8 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: 0.2 }}
-                className="flex flex-col items-center gap-2 p-4 bg-skatta-darker/30 rounded-xl border border-skatta-red/20"
-              >
-                <Flame size={28} className="text-red-400" />
-                <div className="text-skatta-yellow font-black text-2xl">18</div>
-                <p className="text-xs text-gray-400 uppercase tracking-widest">Urgentes</p>
-              </motion.li>
-
-              <motion.li
-                key="matches"
-                initial={{ opacity: 0, scale: 0.8 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: 0.3 }}
-                className="flex flex-col items-center gap-2 p-4 bg-skatta-darker/30 rounded-xl border border-skatta-blue/20"
-              >
-                <ShieldCheck size={28} className="text-skatta-blue" />
-                <div className="text-skatta-yellow font-black text-2xl">89</div>
-                <p className="text-xs text-gray-400 uppercase tracking-widest">Matches Parfaits</p>
-              </motion.li>
-            </motion.ul>
-          </motion.div>
-
-          {/* Search and Filters */}
-          <div className="space-y-6">
-            {/* Search Bar */}
-            <div className="relative">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Rechercher un métier, une compétence, une localité..."
-                className="w-full pl-10 pr-4 py-4 bg-skatta-darker/40 border border-skatta-blue/30 rounded-xl focus:border-skatta-green focus:ring-2 focus:ring-skatta-green/20 text-white placeholder-text-gray-400 transition-all duration-300"
-              />
-            </div>
-
-            {/* Filters Bar */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Sector Filter */}
-              <div className="space-y-3">
-                <p className="text-sm font-black text-skatta-yellow">Secteur</p>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    onClick={() => toggleSector('Bâtiment')}
-                    className={cn(
-                      'px-3 py-2 rounded-full text-xs font-medium transition-all duration-300',
-                      filters.sector.includes('Bâtiment')
-                        ? 'bg-skatta-green/30 text-skatta-green border border-skatta-green/50'
-                        : 'bg-skatta-darker/40 text-gray-400 border border-skatta-blue/30'
-                    )}
-                  >
-                    Bâtiment
-                  </button>
-                  <button
-                    onClick={() => toggleSector('Transport')}
-                    className={cn(
-                      'px-3 py-2 rounded-full text-xs font-medium transition-all duration-300',
-                      filters.sector.includes('Transport')
-                        ? 'bg-skatta-yellow/30 text-skatta-yellow border border-skatta-yellow/50'
-                        : 'bg-skatta-darker/40 text-gray-400 border border-skatta-blue/30'
-                    )}
-                  >
-                    Transport
-                  </button>
-                  <button
-                    onClick={() => toggleSector('Entretien')}
-                    className={cn(
-                      'px-3 py-2 rounded-full text-xs font-medium transition-all duration-300',
-                      filters.sector.includes('Entretien')
-                        ? 'bg-skatta-blue/30 text-skatta-blue border border-skatta-blue/50'
-                        : 'bg-skatta-darker/40 text-gray-400 border border-skatta-blue/30'
-                    )}
-                  >
-                    Entretien
-                  </button>
-                </div>
-              </div>
-
-              {/* Salary Range */}
-              <div className="space-y-3">
-                <p className="text-sm font-black text-skatta-yellow">Salaire (FCFA/JOUR)</p>
-                <div className="space-y-2">
-                  <div className="flex justify-between text-xs text-gray-400">
-                    <span>0</span>
-                    <span>50,000+</span>
-                  </div>
-                  <input
-                    type="range"
-                    min={0}
-                    max={50000}
-                    value={filters.salaryRange[1]}
-                    onChange={(e) =>
-                      setFilters(prev => ({
-                        ...prev,
-                        salaryRange: [prev.salaryRange[0], Number(e.target.value)]
-                      }))
-                    }
-                    className="w-full h-2 bg-skatta-blue/20 rounded-full"
-                  />
-                  <div className="flex justify-between text-sm font-black">
-                    <span>Minimum: 0</span>
-                    <span>Maximum: {filters.salaryRange[1].toLocaleString()}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Urgent Toggle */}
-              <div className="space-y-3 flex flex-col justify-between">
-                <p className="text-sm font-black text-skatta-yellow">Options</p>
-                <div className="flex items-center gap-3">
-                  <Flame size={16} className="text-red-400" />
-                  <label className="flex items-center gap-2 text-sm font-black text-gray-300 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={filters.showUrgent}
-                      onChange={toggleUrgent}
-                      className="h-4 w-4 text-skatta-green border-skatta-blue rounded"
-                    />
-                    Afficher uniquement les urgentes
-                  </label>
-                </div>
-                <button
-                  onClick={clearFilters}
-                  className="mt-3 w-full px-4 py-2 bg-skatta-darker/40 text-sm font-black text-skatta-yellow border border-skatta-blue/30 rounded hover:bg-skatta-blue/20 transition-colors"
-                >
-                  Réinitialiser les filtres
-                </button>
-              </div>
+                <option value="recent">Plus récentes</option>
+                <option value="price-desc">Salaire : le plus élevé</option>
+                <option value="price-asc">Salaire : le plus bas</option>
+              </select>
             </div>
           </div>
 
-          {/* Liste/Carte Toggle */}
-          <div className="flex bg-skatta-darker/40 p-2 rounded-xl w-fit mx-auto border border-skatta-blue/20 backdrop-blur-sm">
+          {/* Panneau de filtres — repliable sur mobile, toujours visible sur ordinateur */}
+          <div className={cn(
+            "bg-white border border-slate-200 rounded-3xl shadow-sm p-5 sm:p-6 space-y-5",
+            !filtersOpen && "hidden md:block"
+          )}>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+              {/* Secteur */}
+              <div className="space-y-2.5">
+                <p className="text-xs font-black uppercase tracking-widest text-slate-500">Secteur</p>
+                <div className="flex flex-wrap gap-2">
+                  {allSectors.map((sector) => {
+                    const active = sectors.includes(sector);
+                    return (
+                      <button
+                        key={sector}
+                        onClick={() => toggleSector(sector)}
+                        aria-pressed={active}
+                        className={cn(
+                          'px-3.5 py-2 rounded-full text-xs font-bold border transition-all min-h-9',
+                          active
+                            ? 'bg-skatta-green text-white border-skatta-green shadow-md shadow-skatta-green/20'
+                            : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-skatta-green/50'
+                        )}
+                      >
+                        {sector}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Quartier */}
+              <div className="space-y-2.5">
+                <label htmlFor="filtre-quartier" className="block text-xs font-black uppercase tracking-widest text-slate-500">Quartier</label>
+                <select
+                  id="filtre-quartier"
+                  value={neighborhood}
+                  onChange={(e) => setNeighborhood(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-sm font-bold text-slate-700 focus:border-skatta-green focus:outline-none min-h-12"
+                >
+                  <option value="Tous">Tous les quartiers</option>
+                  {allNeighborhoods.map((n) => (
+                    <option key={n} value={n}>{n}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Salaire minimum */}
+              <div className="space-y-2.5">
+                <label htmlFor="filtre-salaire" className="block text-xs font-black uppercase tracking-widest text-slate-500">Salaire minimum</label>
+                <select
+                  id="filtre-salaire"
+                  value={minSalary}
+                  onChange={(e) => setMinSalary(Number(e.target.value))}
+                  className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-sm font-bold text-slate-700 focus:border-skatta-green focus:outline-none min-h-12"
+                >
+                  <option value={0}>Tous les salaires</option>
+                  <option value={10000}>10 000 FCFA / jour et +</option>
+                  <option value={12000}>12 000 FCFA / jour et +</option>
+                  <option value={15000}>15 000 FCFA / jour et +</option>
+                </select>
+              </div>
+
+              {/* Type de contrat */}
+              <div className="space-y-2.5">
+                <label htmlFor="filtre-contrat" className="block text-xs font-black uppercase tracking-widest text-slate-500">Type de contrat</label>
+                <select
+                  id="filtre-contrat"
+                  value={contract}
+                  onChange={(e) => setContract(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-sm font-bold text-slate-700 focus:border-skatta-green focus:outline-none min-h-12"
+                >
+                  <option value="Tous">Tous les contrats</option>
+                  {allContracts.map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3 pt-1">
+              <button
+                onClick={() => setShowUrgent((v) => !v)}
+                aria-pressed={showUrgent}
+                className={cn(
+                  "inline-flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-bold border transition-colors min-h-11",
+                  showUrgent
+                    ? "bg-red-50 text-red-600 border-red-200"
+                    : "bg-slate-50 text-slate-600 border-slate-200 hover:border-red-300"
+                )}
+              >
+                <Flame size={16} /> Urgentes seulement
+              </button>
+              <button
+                onClick={() => setShowFavoritesOnly((v) => !v)}
+                aria-pressed={showFavoritesOnly}
+                className={cn(
+                  "inline-flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-bold border transition-colors min-h-11",
+                  showFavoritesOnly
+                    ? "bg-red-50 text-red-600 border-red-200"
+                    : "bg-slate-50 text-slate-600 border-slate-200 hover:border-red-300"
+                )}
+              >
+                <Heart size={16} className={showFavoritesOnly ? "fill-red-500 text-red-500" : ""} />
+                Mes favoris ({favorites.length})
+              </button>
+              {hasActiveFilters && (
+                <button
+                  onClick={clearFilters}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-bold bg-slate-900 text-white hover:bg-slate-700 transition-colors min-h-11"
+                >
+                  <RotateCcw size={16} /> Réinitialiser les filtres
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Compteur de résultats */}
+          <p className="text-sm font-bold text-slate-500" role="status">
+            {showFavoritesOnly
+              ? `${filteredJobs.length} offre${filteredJobs.length > 1 ? 's' : ''} dans tes favoris`
+              : `${filteredJobs.length} offre${filteredJobs.length > 1 ? 's' : ''} trouvée${filteredJobs.length > 1 ? 's' : ''}`}
+            {hasActiveFilters && ' avec tes critères'}
+          </p>
+
+          {/* Liste / Carte */}
+          <div className="flex bg-white p-1.5 rounded-full w-fit border border-slate-200 shadow-sm">
             <button
               onClick={() => setActiveTab('list')}
               className={cn(
-                "px-6 py-3 rounded-xl text-sm font-black transition-all duration-300",
-                activeTab === 'list'
-                  ? "bg-skatta-green text-white shadow-lg shadow-skatta-green/30"
-                  : "text-gray-400 hover:text-skatta-green"
+                "px-5 sm:px-6 py-3 rounded-full text-sm font-bold transition-all min-h-11 inline-flex items-center gap-2",
+                activeTab === 'list' ? "bg-skatta-green text-white shadow-md" : "text-slate-500 hover:text-skatta-green"
               )}
             >
-              Liste des Offres
+              <List size={16} /> Liste des offres
             </button>
             <button
               onClick={() => setActiveTab('map')}
               className={cn(
-                "px-6 py-3 rounded-xl text-sm font-black transition-all duration-300",
-                activeTab === 'map'
-                  ? "bg-skatta-green text-white shadow-lg shadow-skatta-green/30"
-                  : "text-gray-400 hover:text-skatta-green"
+                "px-5 sm:px-6 py-3 rounded-full text-sm font-bold transition-all min-h-11 inline-flex items-center gap-2",
+                activeTab === 'map' ? "bg-skatta-green text-white shadow-md" : "text-slate-500 hover:text-skatta-green"
               )}
             >
-              Vue Carte
+              <MapPin size={16} /> Vue carte
             </button>
           </div>
 
-          {/* Job Listings or Map */}
-          <div className="mt-8">
+          {/* Contenu : liste ou carte */}
+          <div className="mt-2">
             {activeTab === 'list' ? (
               <div className="space-y-6">
-                {/* Loading State */}
-                {isLoading && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-                    {[0, 1, 2].map((item) => (
-                      <div
-                        key={item}
-                        className="rounded-2xl border border-white/10 bg-white/[0.04] overflow-hidden shadow-2xl shadow-black/20 animate-pulse"
-                      >
-                        <div className="h-48 bg-white/10" />
-                        <div className="p-6 space-y-4">
-                          <div className="h-4 w-24 rounded-full bg-skatta-green/20" />
-                          <div className="h-6 w-4/5 rounded-full bg-white/10" />
-                          <div className="h-4 w-2/3 rounded-full bg-white/10" />
-                          <div className="h-12 w-full rounded-full bg-skatta-yellow/20" />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* Jobs Grid */}
-                {!isLoading && filteredJobs.length > 0 && (
+                {filteredJobs.length > 0 ? (
                   <motion.div
-                    whileHover={{ y: -2 }}
-                    animate={cardAnimation}
-                    className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8"
+                    className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8"
                   >
-                    {filteredJobs.map((job, index) => (
-                      <motion.div
-                        key={job.id}
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: index * 0.05, type: 'spring', stiffness: 300, damping: 20 }}
-                        whileHover={{ scale: 1.03 }}
-                        whileTap={{ scale: 0.97 }}
-                        onClick={() => handleJobClick(job.id)}
-                        className={cn(
-                          "group cursor-pointer relative overflow-hidden",
-                          hoveredJobId === job.id
-                            ? "scale-105 z-10"
-                            : ""
-                        )}
-                      >
-                        {/* Job Card Premium */}
-                        <div className="bg-white/[0.04] backdrop-blur-2xl rounded-2xl border border-white/10 overflow-hidden transition-all duration-500 group-hover:border-skatta-green/40 hover:shadow-2xl hover:shadow-skatta-green/10">
-                          {/* Image Container */}
+                    {filteredJobs.map((job, index) => {
+                      const isFav = favorites.includes(job.id);
+                      return (
+                        <motion.article
+                          key={job.id}
+                          initial={{ opacity: 0, y: 20 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: Math.min(index * 0.05, 0.3), type: 'spring', stiffness: 300, damping: 20 }}
+                          whileHover={{ scale: 1.02 }}
+                          onClick={() => handleJobClick(job.id)}
+                          onMouseEnter={() => setHoveredJobId(job.id)}
+                          onMouseLeave={() => setHoveredJobId(null)}
+                          className="group cursor-pointer relative overflow-hidden bg-white rounded-3xl border border-slate-200 shadow-lg shadow-slate-900/5 hover:border-skatta-green/50 hover:shadow-xl transition-all duration-300"
+                        >
                           <div className="relative h-48">
                             <img
                               src={job.imageUrl}
                               alt={job.title}
+                              loading="lazy"
                               className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
                             />
-                            {/* Live/Urgency Badges */}
-                            <div className="absolute top-3 left-3 flex items-center gap-2 bg-skatta-darker/70 backdrop-blur-sm px-2 py-1 rounded-full border border-white/20">
+                            <div className="absolute top-3 left-3 flex items-center gap-2 bg-white/90 backdrop-blur-sm px-2.5 py-1 rounded-full border border-slate-200 shadow-sm">
                               <span className="relative flex h-2 w-2">
-                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-skatta-green opacity-75"></span>
-                                <span className="relative inline-flex rounded-full h-2 w-2 bg-skatta-green animate-pulse-green"></span>
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-skatta-green opacity-75" />
+                                <span className="relative inline-flex rounded-full h-2 w-2 bg-skatta-green" />
                               </span>
                               <span className="text-[9px] font-black text-skatta-blue uppercase tracking-tighter">Skatta LIVE</span>
                             </div>
-
                             {job.urgency === 'high' && (
-                              <div className="absolute top-3 right-3 bg-red-500/90 text-white text-[9px] font-black px-2 py-1 rounded-full uppercase tracking-tighter shadow-lg animate-bounce">
+                              <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-red-500 text-white text-[10px] font-black px-2.5 py-1 rounded-full uppercase tracking-wider shadow-lg">
                                 Urgent
                               </div>
                             )}
+                            <button
+                              onClick={(e) => toggleFavorite(job.id, e)}
+                              aria-label={isFav ? 'Retirer des favoris' : 'Ajouter aux favoris'}
+                              aria-pressed={isFav}
+                              className={cn(
+                                "absolute top-3 right-3 w-10 h-10 rounded-full flex items-center justify-center shadow-lg transition-all",
+                                isFav
+                                  ? "bg-red-500 text-white"
+                                  : "bg-white/90 text-slate-400 hover:text-red-500"
+                              )}
+                            >
+                              <Heart size={19} className={isFav ? "fill-white" : ""} />
+                            </button>
                           </div>
 
-                          {/* Job Content */}
-                          <div className="p-6 space-y-4">
-                            {/* Header with Title and Price */}
-                            <div className="flex justify-between items-start gap-4">
-                              <div className="space-y-2">
-                                {/* Sector Badge */}
-                                <span className={cn(
-                                  "badge-sector",
-                                  getSectorColor(job.category)
-                                )}>
+                          <div className="p-5 sm:p-6 space-y-3.5">
+                            <div className="flex justify-between items-start gap-3">
+                              <div className="space-y-2 min-w-0">
+                                <span className={cn("badge-sector", getSectorColor(job.category))}>
                                   {job.category}
                                 </span>
-
-                                {/* Job Title */}
-                                <h3 className="text-editorial-header text-xl line-clamp-2 group-hover:text-skatta-green transition-colors duration-300">
-                                  {job.title}
+                                <h3 className="text-lg font-black text-slate-900 leading-snug line-clamp-2 group-hover:text-skatta-green transition-colors">
+                                  {job.title.split(' — ')[0]}
                                 </h3>
                               </div>
-
-                              {/* Price */}
-                              <div className="text-right space-y-2">
-                                <span className="block font-black text-skatta-yellow text-xl leading-none">
-                                  {formatPrice(job.price)}
+                              <div className="text-right shrink-0">
+                                <span className="block font-black text-skatta-green text-lg leading-none">
+                                  {job.price.toLocaleString()} FCFA
                                 </span>
-                                <span className="text-editorial-label">/ JOUR</span>
+                                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">/ jour</span>
                               </div>
                             </div>
 
-                            {/* Details Row */}
-                            <div className="flex items-center gap-4 text-gray-300 text-[11px] font-medium">
+                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-slate-500 text-xs font-semibold">
                               <span className="flex items-center gap-1.5">
                                 <MapPin size={14} className="text-skatta-green" />
                                 {job.location.neighborhood}
                               </span>
                               <span className="flex items-center gap-1.5">
-                                <Clock size={14} className="text-skatta-green" />
-                                {job.duration === 'day' ? 'Journalier' : 'Intérim'}
+                                <Briefcase size={14} className="text-skatta-green" />
+                                {job.contractType ?? 'Journalier'}
+                              </span>
+                              <span className="flex items-center gap-1.5">
+                                <CalendarDays size={14} className="text-skatta-green" />
+                                {postedLabel(job.createdAt)}
                               </span>
                             </div>
 
-                            {/* Description Preview */}
-                            {job.description.length > 100 && (
-                              <p className="text-gray-400 text-sm line-clamp-2 mt-2">
-                                {job.description.substring(0, 100)}...
-                              </p>
-                            )}
+                            <p className="text-slate-500 text-sm line-clamp-2">
+                              {job.description}
+                            </p>
 
-                            {/* Apply Button */}
-                            <div className="mt-4 pt-4 border-t border-skatta-blue/10">
+                            <div className="pt-3 border-t border-slate-100">
                               <PremiumButton
                                 variant="outline"
                                 size="md"
-                                className="w-full text-left flex items-center justify-between"
+                                className="w-full justify-between"
                               >
                                 <span>Postuler maintenant</span>
                                 <ArrowRight size={18} />
                               </PremiumButton>
                             </div>
                           </div>
-                        </div>
-                      </motion.div>
-                    ))}
+                        </motion.article>
+                      );
+                    })}
                   </motion.div>
-                )}
-
-                {/* Empty State */}
-                {!isLoading && filteredJobs.length === 0 && (
-                  <div className="text-center py-12">
-                    <Pencil size={48} className="mx-auto text-skatta-blue/30 mb-4" />
-                    <h3 className="font-black text-skatta-yellow text-xl">Aucune offre ne correspond à vos critères</h3>
-                    <p className="text-gray-400 max-w-xl mx-auto">
-                      Essayez d'élargir votre recherche ou de modifier vos filtres pour découvrir davantage d'opportunités.
+                ) : (
+                  <div className="text-center py-14 px-6 bg-white border border-slate-200 rounded-3xl shadow-sm">
+                    <div className="w-16 h-16 mx-auto rounded-full bg-slate-100 flex items-center justify-center mb-4">
+                      <Search size={28} className="text-slate-400" />
+                    </div>
+                    <h3 className="font-black text-slate-900 text-xl">
+                      {showFavoritesOnly
+                        ? 'Aucun favori pour le moment'
+                        : jobs.length === 0
+                          ? 'Aucune offre en ligne pour le moment'
+                          : 'Aucune offre ne correspond à tes critères'}
+                    </h3>
+                    <p className="text-slate-500 max-w-md mx-auto mt-2 text-sm">
+                      {showFavoritesOnly
+                        ? 'Touche le cœur sur une offre pour la retrouver ici, même après avoir fermé le site.'
+                        : jobs.length === 0
+                          ? 'Les premières offres arrivent bientôt. Employeur ? Publie la première offre de Skatta.'
+                          : 'Essaie d’élargir ta recherche ou de modifier tes filtres pour découvrir davantage d’opportunités.'}
                     </p>
                     <button
                       onClick={clearFilters}
-                      className="mt-6 px-6 py-3 bg-skatta-green text-white font-medium rounded-lg hover:bg-skatta-green/90 transition-colors"
+                      className="mt-6 inline-flex items-center gap-2 px-6 py-3.5 bg-skatta-green text-white font-bold rounded-full hover:bg-skatta-green/90 transition-colors min-h-12"
                     >
-                      Réinitialiser les filtres
+                      <RotateCcw size={16} />
+                      {showFavoritesOnly ? 'Voir toutes les offres' : 'Réinitialiser les filtres'}
                     </button>
                   </div>
                 )}
               </div>
             ) : (
-              <>
-                {/* Enhanced Map View with Leaflet.js */}
-                <div className="rounded-2xl border border-skatta-blue/20 overflow-hidden">
-                {/* Map Container */}
+              <div className="relative z-0 rounded-3xl border border-slate-200 overflow-hidden bg-white shadow-lg shadow-slate-900/5">
                 <div className="relative h-[70vh]">
                   {leaflet ? (
                     <MapContainer
-                      center={[0.4167, 9.4498]}  // Default to Glass area
+                      center={[0.4167, 9.4498]}
                       zoom={12}
                       scrollWheelZoom={true}
                       doubleClickZoom={true}
@@ -607,97 +684,52 @@ export const Dashboard = ({
                       className="w-full h-full"
                       ref={setMapRef}
                     >
-                    {/* Tile Layer */}
-                    <TileLayer
-                      attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                      url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                    />
-
-                    {/* Job Markers */}
-                    {!isLoading && filteredJobs.map((job) => (
-                      <Marker
-                        key={job.id}
-                        position={[job.location.lat, job.location.lng]}
-                        icon={getJobMarkerIcon(job.urgency, leaflet)}
-                        eventHandlers={{
-                          click: () => handleMarkerClick(job.id),
-                          mouseover: () => {
-                            setHoveredJobId(job.id);
-                            // Optionally popup on hover
-                          },
-                          mouseout: () => {
-                            if (hoveredJobId === job.id) {
-                              setHoveredJobId(null);
-                            }
-                          }
-                        }}
-                      >
-                        <Popup>
-                          <div className="p-4 min-w-[200px]">
-                            <div className="flex items-center gap-3 mb-3">
-                              <div className="w-8 h-8 bg-skatta-green/20 rounded-full flex items-center justify-center">
-                                <MapPin size={16} className="text-skatta-green" />
-                              </div>
-                              <div>
-                                <h4 className="font-black text-skatta-yellow">{job.title}</h4>
-                                <p className="text-sm text-gray-300">{formatPrice(job.price)}</p>
-                              </div>
-                            </div>
-                            <div className="space-y-2">
-                              <p className="text-xs text-gray-400">
-                                <strong>Secteur:</strong> {job.category}
-                              </p>
-                              <p className="text-xs text-gray-400">
-                                <strong>Quartier:</strong> {job.location.neighborhood}
+                      <TileLayer
+                        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                      />
+                      {filteredJobs.map((job) => (
+                        <Marker
+                          key={job.id}
+                          position={[job.location.lat, job.location.lng]}
+                          icon={getJobMarkerIcon(job.urgency, leaflet)}
+                          eventHandlers={{
+                            mouseover: () => setHoveredJobId(job.id),
+                            mouseout: () => { if (hoveredJobId === job.id) setHoveredJobId(null); }
+                          }}
+                        >
+                          <Popup>
+                            <div className="p-3 min-w-[200px]">
+                              <h4 className="font-black text-slate-900">{job.title}</h4>
+                              <p className="text-sm text-slate-600 font-bold">{formatPrice(job.price)}</p>
+                              <p className="text-xs text-slate-500 mt-1">
+                                {job.category} · {job.location.neighborhood}
                               </p>
                               {job.urgency === 'high' && (
-                                <p className="text-xs text-red-400 font-medium">
-                                  <strong>Urgente!</strong>
-                                </p>
+                                <p className="text-xs text-red-500 font-bold mt-1">Urgent !</p>
                               )}
-                            </div>
-                            <div className="mt-3 pt-3 border-t border-skatta-blue/20">
                               <button
-                                onClick={() => {
-                                  router.push(`/offres/${job.id}`);
-                                  // Close popup after navigation? In a real app, this would be handled by navigation
-                                }}
-                                className={cn(
-                                  "w-full px-3 py-2 bg-skatta-green text-white font-medium rounded text-sm",
-                                  "hover:bg-skatta-green/90 transition-colors"
-                                )}
+                                onClick={() => router.push(`/offres/${job.id}`)}
+                                className="mt-3 w-full px-3 py-2.5 bg-skatta-green text-white font-bold rounded-full text-sm hover:bg-skatta-green/90 transition-colors"
                               >
                                 Voir les détails
                               </button>
                             </div>
-                          </div>
-                        </Popup>
-                      </Marker>
-                    ))}
-
-                    {/* Selected Job Highlight (if any) */}
-                    {selectedJobId && !isLoading && (
-                      <>
-                        {/* This would typically be handled by the popup or a custom overlay */}
-                        {/* For now, we rely on the popup from the marker click */}
-                      </>
-                    )}
+                          </Popup>
+                        </Marker>
+                      ))}
                     </MapContainer>
                   ) : (
-                    <div className="flex h-full items-center justify-center bg-skatta-darker/60 text-gray-300">
-                      Chargement de la carte...
+                    <div className="flex h-full items-center justify-center bg-slate-100 text-slate-500">
+                      Chargement de la carte…
                     </div>
                   )}
 
-                  {/* Map Controls */}
-                  <div className="absolute top-4 left-4 flex space-x-3 z-10">
+                  <div className="absolute top-4 left-4 flex gap-2 z-10">
                     <button
-                      onClick={() => {
-                        if (mapRef) {
-                          mapRef.flyTo([0.4167, 9.4498], 12); // Return to default view
-                        }
-                      }}
-                      className="p-2 rounded-full bg-skatta-blue/20 text-skatta-blue hover:bg-skatta-blue/30 transition-colors"
+                      onClick={() => { if (mapRef) mapRef.flyTo([0.4167, 9.4498], 12); }}
+                      className="p-2.5 rounded-full bg-white text-skatta-blue shadow-lg border border-slate-200 hover:bg-slate-50 transition-colors"
+                      aria-label="Recentrer la carte"
                     >
                       <Pencil size={18} />
                     </button>
@@ -705,66 +737,76 @@ export const Dashboard = ({
                       onClick={() => {
                         if (leaflet && mapRef && filteredJobs.length > 0) {
                           const bounds = leaflet.latLngBounds(
-                            filteredJobs.map(job => [job.location.lat, job.location.lng])
+                            filteredJobs.map(job => [job.location.lat, job.location.lng] as [number, number])
                           );
                           mapRef.fitBounds(bounds.pad(0.2));
                         }
                       }}
-                      className="p-2 rounded-full bg-skatta-blue/20 text-skatta-blue hover:bg-skatta-blue/30 transition-colors"
+                      className="p-2.5 rounded-full bg-white text-skatta-blue shadow-lg border border-slate-200 hover:bg-slate-50 transition-colors"
+                      aria-label="Voir toutes les offres sur la carte"
                     >
                       <ArrowRight size={18} />
                     </button>
                   </div>
-
-                  {/* Attribution Control Alternative */}
-                  <div className="absolute bottom-0 left-0 right-0 p-2 text-xs text-gray-400">
-                    Données cartographiques &copy; OpenStreetMap contributeurs
-                  </div>
                 </div>
 
-                {/* Map Footer with Stats */}
-                <div className="px-4 pt-3 pb-2 bg-skatta-darker/40 border-t border-skatta-blue/20">
-                  <div className="flex justify-between text-sm font-medium">
+                <div className="px-4 py-3 bg-slate-50 border-t border-slate-200">
+                  <div className="flex flex-wrap justify-between gap-2 text-sm font-semibold text-slate-600">
+                    <span>{filteredJobs.length} offre{filteredJobs.length > 1 ? 's' : ''} affichée{filteredJobs.length > 1 ? 's' : ''} sur la carte</span>
                     <span>
-                      {filteredJobs.length} offres affichées sur la carte
-                    </span>
-                    <span>
-                      {filters.sector.length > 0 ?
-                        `Filtre: ${filters.sector.join(', ')}` :
-                        `Aucun filtre de secteur`}
+                      {sectors.length > 0 ? `Filtre : ${sectors.join(', ')}` : 'Aucun filtre de secteur'}
                     </span>
                   </div>
                 </div>
-                </div>
-              </>
+              </div>
             )}
           </div>
-        </main>
+        </section>
 
-        {/* Mobile Bottom Navigation */}
-        <nav className="fixed bottom-0 left-0 right-0 glass-dark border-t border-skatta-blue/10 px-6 py-4 flex justify-between items-center z-50 backdrop-blur-sm">
+        {/* Comment ça marche + pied de page complet */}
+        <div className="px-0 sm:px-0 max-w-7xl mx-auto space-y-14 pb-8">
+          <HowItWorks />
+          <Footer />
+        </div>
+        <div className="h-20" />
+
+        {/* Navigation mobile fixe */}
+        <nav className="fixed bottom-0 left-0 right-0 glass-dark px-6 py-3 flex justify-between items-center z-50 md:hidden">
           <button
-            onClick={() => onNavigate?.('home')}
-            className="flex flex-col items-center gap-1 text-skatta-green"
+            onClick={() => scrollToId('top')}
+            className="flex flex-col items-center gap-1 text-skatta-green min-w-16 py-1"
           >
             <TrendingUp size={24} />
             <span className="text-[10px] font-black uppercase tracking-widest">Accueil</span>
           </button>
           <button
-            onClick={() => onNavigate?.('messages')}
-            className="flex flex-col items-center gap-1 text-gray-400 hover:text-skatta-blue transition-colors"
+            onClick={() => scrollToId('offres-liste')}
+            className="flex flex-col items-center gap-1 text-slate-500 hover:text-skatta-green transition-colors min-w-16 py-1"
           >
-            <MessageSquare size={24} />
-            <span className="text-[10px] font-black uppercase tracking-widest">Messages</span>
+            <Briefcase size={24} />
+            <span className="text-[10px] font-black uppercase tracking-widest">Offres</span>
           </button>
           <button
-            onClick={() => onNavigate?.('profile')}
-            className="flex flex-col items-center gap-1 text-gray-400 hover:text-skatta-blue transition-colors"
+            onClick={goToFavorites}
+            className="flex flex-col items-center gap-1 text-slate-500 hover:text-red-500 transition-colors min-w-16 py-1 relative"
           >
-            <User size={24} />
-            <span className="text-[10px] font-black uppercase tracking-widest">Profil</span>
+            <Heart size={24} className={showFavoritesOnly ? "fill-red-500 text-red-500" : ""} />
+            <span className="text-[10px] font-black uppercase tracking-widest">Favoris</span>
+            {favorites.length > 0 && (
+              <span className="absolute top-0 right-2 min-w-5 h-5 px-1 rounded-full bg-red-500 text-white text-[11px] font-black inline-flex items-center justify-center">
+                {favorites.length}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={() => router.push('/mes-candidatures')}
+            className="flex flex-col items-center gap-1 text-slate-500 hover:text-skatta-blue transition-colors min-w-16 py-1"
+          >
+            <MessageSquare size={24} />
+            <span className="text-[10px] font-black uppercase tracking-widest">Candidatures</span>
           </button>
         </nav>
-      </div>
-    );
+      </main>
+    </div>
+  );
 };

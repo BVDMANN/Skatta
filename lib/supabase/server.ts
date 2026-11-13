@@ -1,0 +1,66 @@
+import { createServerClient } from '@supabase/ssr';
+import { cookies } from 'next/headers';
+import { isSupabaseConfigured, supabaseAnonKey, supabaseUrl } from './config';
+
+/** Client Supabase côté serveur (cookies — anon key uniquement). */
+export async function createClient() {
+  const cookieStore = await cookies();
+  return createServerClient(supabaseUrl(), supabaseAnonKey(), {
+    cookies: {
+      getAll() {
+        return cookieStore.getAll();
+      },
+      setAll(cookiesToSet) {
+        try {
+          cookiesToSet.forEach(({ name, value, options }) =>
+            cookieStore.set(name, value, options)
+          );
+        } catch {
+          // Appelé depuis un Server Component : l'écriture des cookies est
+          // gérée par le proxy (middleware) qui rafraîchit la session.
+        }
+      },
+    },
+  });
+}
+
+export type ProfileRole = 'candidat' | 'employeur';
+
+export interface SessionProfile {
+  id: string;
+  email: string;
+  full_name: string | null;
+  phone: string | null;
+  role: ProfileRole;
+  company_name: string | null;
+  response_rate: number | null;
+  experience: string | null;
+  payment_method: string | null;
+  is_demo: boolean;
+  created_at: string;
+}
+
+/** Utilisateur connecté + son profil public. Retourne null si non connecté
+ *  ou si Supabase n'est pas configuré. */
+export async function getSessionUser(): Promise<{
+  id: string;
+  email: string;
+  profile: SessionProfile | null;
+} | null> {
+  if (!isSupabaseConfigured()) return null;
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', user.id)
+    .single();
+  return {
+    id: user.id,
+    email: user.email ?? '',
+    profile: (profile as SessionProfile | null) ?? null,
+  };
+}

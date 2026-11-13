@@ -17,6 +17,15 @@ export interface UserProfile {
   isVerified: boolean;
 }
 
+export interface Employer {
+  id: string;
+  name: string;
+  responseRate: number;
+  responseLabel: string;
+  experience: string;
+  payment: string;
+}
+
 export interface Job {
   id: string;
   employerId: string;
@@ -25,6 +34,7 @@ export interface Job {
   description: string;
   price: number;
   duration: 'day' | 'interim';
+  contractType?: 'Journalier' | 'Intérim' | 'CDD' | 'Mission';
   location: {
     lat: number;
     lng: number;
@@ -35,6 +45,9 @@ export interface Job {
   status: 'open' | 'filled' | 'cancelled';
   createdAt: string;
   imageUrl: string;
+  skills?: string[];
+  benefits?: string[];
+  employerNote?: string;
 }
 
 export interface Message {

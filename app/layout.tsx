@@ -1,4 +1,5 @@
 import '@/styles/globals.css';
+import 'leaflet/dist/leaflet.css';
 
 export const metadata = {
   title: 'Skatta | Trouve ton Skatta',
@@ -12,7 +13,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="fr" className="dark">
+    <html lang="fr">
       <body>
         {children}
       </body>

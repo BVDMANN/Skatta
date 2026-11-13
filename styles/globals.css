@@ -31,13 +31,25 @@ body {
   color: rgb(var(--foreground-rgb));
 }
 
+/* 🔍 Recherche : un seul bouton d'effacement — jamais le × natif du navigateur
+   en double du bouton custom. Même si un champ repasse en type="search",
+   le bouton natif (Chrome/Safari) reste masqué. */
+input::-webkit-search-cancel-button,
+input::-webkit-search-decoration,
+input::-ms-clear {
+  display: none;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
 /* 🚀 SKATTA HIGH-TECH GLASSMORPHISM - Refined for Smart-Feel */
 .glass {
   @apply backdrop-blur-2xl bg-white/70 border border-white/50 shadow-2xl shadow-black/10;
 }
 
+/* 🪟 Verre clair — en-têtes et barres fixes sur fond clair */
 .glass-dark {
-  @apply backdrop-blur-2xl bg-skatta-blue/85 text-white border-b border-white/10 shadow-2xl shadow-black/20;
+  @apply backdrop-blur-2xl bg-white/90 text-slate-900 border-b border-slate-200 shadow-lg shadow-slate-900/5;
 }
 
 /* 💳 PREMIUM JOB CARDS (Editorial Version) */
@@ -86,22 +98,28 @@ body {
   @apply bg-skatta-yellow/90 text-skatta-blue hover:bg-skatta-yellow/80;
 }
 
-/* 🏷️ SECTOR BADGES */
+/* 🏷️ SECTOR BADGES — couleurs lisibles sur fond clair */
 .badge-sector {
-  @apply px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-300;
+  @apply px-3 py-1.5 rounded-full text-xs font-bold transition-all duration-300;
 }
 
 .badge-sector.batiment {
-  @apply bg-skatta-green/20 text-skatta-green;
+  @apply bg-green-100 text-green-800;
 }
 .badge-sector.transport {
-  @apply bg-skatta-yellow/20 text-skatta-yellow;
+  @apply bg-amber-100 text-amber-800;
 }
 .badge-sector.entretien {
-  @apply bg-skatta-blue/20 text-skatta-blue;
+  @apply bg-blue-100 text-blue-800;
+}
+.badge-sector.securite {
+  @apply bg-violet-100 text-violet-800;
+}
+.badge-sector.logistique {
+  @apply bg-teal-100 text-teal-800;
 }
 .badge-sector.other {
-  @apply bg-skatta-blue/20 text-skatta-blue;
+  @apply bg-slate-100 text-slate-700;
 }
 
 /* ⚡ SMART PULSE ANIMATION - "Breathing" Effect */
@@ -139,6 +157,32 @@ body {
   }
 }
 
+/* 🌍 Leaflet — pointeur de mission personnalisé */
+.skatta-map-pin-wrap {
+  background: transparent;
+  border: none;
+}
+
+.skatta-map-pin {
+  width: 28px;
+  height: 28px;
+  border-radius: 9999px;
+  background: #006400;
+  border: 3px solid #ffffff;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45), 0 0 0 6px rgba(0, 100, 0, 0.25);
+  animation: skatta-pin-pulse 2s ease-in-out infinite;
+}
+
+@keyframes skatta-pin-pulse {
+  0%, 100% { box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45), 0 0 0 6px rgba(0, 100, 0, 0.25); }
+  50% { box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45), 0 0 0 12px rgba(0, 100, 0, 0.12); }
+}
+
+/* 🧭 Défilement doux pour les ancres */
+html {
+  scroll-behavior: smooth;
+}
+
 /* 🗺️ LEAFLET MAP CUSTOMIZATIONS */
 .leaflet-container {
   /* Override Leaflet's default styling to match our design */
@@ -147,7 +191,7 @@ body {
   }
 
   .leaflet-popup-content-wrapper {
-    @apply bg-skatta-darker/90 rounded-xl border border-skatta-blue/20;
+    @apply bg-white rounded-xl border border-slate-200 shadow-xl;
   }
 
   .leaflet-popup-content {
@@ -155,7 +199,7 @@ body {
   }
 
   .leaflet-popup-tip {
-    @apply bg-skatta-darker/90 border border-skatta-blue/20;
+    @apply bg-white border border-slate-200;
   }
 
   /* Custom marker styles */
@@ -170,8 +214,8 @@ body {
   /* Zoom control buttons */
   .leaflet-control-zoom-in,
   .leaflet-control-zoom-out {
-    @apply bg-skatta-blue/20 text-skatta-yellow rounded-md hover:bg-skatta-blue/30 transition-colors !important;
-    border: none !important;
+    @apply bg-white text-skatta-blue rounded-md hover:bg-slate-100 transition-colors !important;
+    border: 1px solid #e2e8f0 !important;
     font-weight: bold !important;
     width: 28px !important;
     height: 28px !important;
@@ -180,7 +224,7 @@ body {
 
   .leaflet-control-zoom-in:hover,
   .leaflet-control-zoom-out:hover {
-    @apply bg-skatta-blue/30 !important;
+    @apply bg-slate-100 !important;
   }
 
   .leaflet-bar {
