@@ -30,12 +30,7 @@ export default async function TableauDeBordPage() {
             compte candidat.
           </p>
           <p className="text-sm text-slate-500">
-            Pour publier des offres, crée un compte employeur (gratuit) ou
-            contacte-nous à{' '}
-            <a href="mailto:boulinguirandy12@gmail.com" className="text-skatta-green font-bold hover:underline">
-              boulinguirandy12@gmail.com
-            </a>
-            .
+            Pour publier des offres, crée un compte employeur (gratuit).
           </p>
           <Link href="/inscription" className="inline-block px-6 py-3.5 bg-skatta-green text-white font-bold rounded-full hover:bg-skatta-green/90 transition-colors">
             Créer un compte employeur

@@ -13,8 +13,7 @@ Durée estimée : 30 à 45 minutes.
 ## Ce qu'il te faut avant de commencer
 
 - Un compte **GitHub** (déjà OK : BVDMANN, dépôt `Skatta`).
-- Une adresse e-mail pour créer les comptes (tu peux utiliser
-  `boulinguirandy12@gmail.com`).
+- Une adresse e-mail pour créer les comptes.
 - Une carte bancaire **n'est pas demandée** : Supabase, Vercel et Resend ont
   des offres gratuites suffisantes pour démarrer.
 
@@ -121,7 +120,7 @@ Deployments → ⋯ → Redeploy) pour que tout soit cohérent.
    « En attente ».
 3. **Inscription employeur** : déconnecte-toi, inscris un deuxième compte
    avec le rôle **Employeur** (utilise une autre adresse e-mail, ou la même
-   avec un `+` : ex `boulinguirandy12+employeur@gmail.com`).
+   avec un `+` (ex : `ton-adresse+employeur@gmail.com`).
 4. **Publication** : connecte-toi en employeur, va dans **Tableau de bord**,
    clique « + Publier une offre », remplis le formulaire et publie. L'offre
    apparaît immédiatement dans la liste.

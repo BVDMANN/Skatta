@@ -14,11 +14,7 @@ export default function ConfidentialitePage() {
           <h2 className="text-lg font-black text-slate-900">1. Responsable du traitement</h2>
           <p>
             Stacks, entreprise individuelle, SIREN 104 314 687, 5 allée Xavier
-            Bichat, 77420 Champs-sur-Marne, France — contact :{' '}
-            <a href="mailto:boulinguirandy12@gmail.com" className="text-skatta-green font-bold hover:underline">
-              boulinguirandy12@gmail.com
-            </a>
-            .
+            Bichat, 77420 Champs-sur-Marne, France.
           </p>
         </section>
 
@@ -62,10 +58,7 @@ export default function ConfidentialitePage() {
           <p>
             Tes données sont conservées tant que ton compte est actif. Tu peux
             demander la suppression de ton compte et de tes données à tout
-            moment en écrivant à{' '}
-            <a href="mailto:boulinguirandy12@gmail.com" className="text-skatta-green font-bold hover:underline">
-              boulinguirandy12@gmail.com
-            </a>{' '}
+            moment auprès de Stacks (SIREN 104 314 687)
             ; la suppression est effectuée sous 30 jours, sauf obligation légale
             de conservation.
           </p>
@@ -77,11 +70,8 @@ export default function ConfidentialitePage() {
             Conformément au Règlement Général sur la Protection des Données
             (RGPD), tu disposes d’un droit d’accès, de rectification,
             d’effacement, de limitation et de portabilité de tes données, ainsi
-            que d’un droit d’opposition. Pour exercer ces droits, écris à{' '}
-            <a href="mailto:boulinguirandy12@gmail.com" className="text-skatta-green font-bold hover:underline">
-              boulinguirandy12@gmail.com
-            </a>
-            . Tu peux également introduire une réclamation auprès de la CNIL.
+            que d’un droit d’opposition. Pour exercer ces droits, contacte Stacks (SIREN 104 314 687).
+            Tu peux également introduire une réclamation auprès de la CNIL.
           </p>
         </section>
 

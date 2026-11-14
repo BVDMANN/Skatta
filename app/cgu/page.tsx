@@ -89,12 +89,7 @@ export default function CguPage() {
         <section className="space-y-2">
           <h2 className="text-lg font-black text-slate-900">8. Contact</h2>
           <p>
-            Pour toute question :{' '}
-            <a href="mailto:boulinguirandy12@gmail.com" className="text-skatta-green font-bold hover:underline">
-              boulinguirandy12@gmail.com
-            </a>
-            .{' '}
-            <span className="text-amber-700 bg-amber-50 px-1 rounded">[à compléter : adresse postale de contact si différente du siège, numéro de téléphone]</span>
+            Pour toute question : Stacks, entreprise individuelle — SIREN 104 314 687.
           </p>
         </section>
 

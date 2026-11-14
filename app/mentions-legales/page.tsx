@@ -19,14 +19,10 @@ export default function MentionsLegalesPage() {
             <strong>5 allée Xavier Bichat, 77420 Champs-sur-Marne, France</strong>.
           </p>
           <p>
-            Contact :{' '}
-            <a href="mailto:boulinguirandy12@gmail.com" className="text-skatta-green font-bold hover:underline">
-              boulinguirandy12@gmail.com
-            </a>
+            Contact : Stacks — SIREN 104 314 687.
           </p>
           <p>
-            Directeur de la publication : Gilchrist Randy Boulingui.{' '}
-            <span className="text-amber-700 bg-amber-50 px-1 rounded">[à compléter : numéro de téléphone de contact, si souhaité]</span>
+            Directeur de la publication : Stacks, entreprise individuelle (SIREN 104 314 687).
           </p>
         </section>
 

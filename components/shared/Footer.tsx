@@ -1,7 +1,7 @@
 "use client";
 
 import Link from 'next/link';
-import { ArrowRight, Github } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import { SITE_IMAGES } from '@/lib/mock-data';
 
 export const Footer = ({ onGoToSection }: { onGoToSection?: (id: string) => void }) => {
@@ -89,16 +89,6 @@ export const Footer = ({ onGoToSection }: { onGoToSection?: (id: string) => void
           <div className="space-y-3">
             <p className="text-xs font-black uppercase tracking-widest text-skatta-green">Le projet</p>
             <ul className="space-y-2 text-sm">
-              <li>
-                <a
-                  href="https://github.com/BVDMANN/Skatta"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-2 text-slate-600 hover:text-skatta-green transition-colors"
-                >
-                  <Github size={16} /> Code source sur GitHub
-                </a>
-              </li>
               <li className="text-slate-500">Libreville &amp; Port-Gentil, Gabon</li>
               <li className="text-slate-500">Paiement cash à la fin de la journée</li>
               <li>
